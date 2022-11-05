@@ -44,15 +44,6 @@ type Pixel struct {
 	A uint8
 }
 
-func (pixel *Pixel) Clone() Pixel {
-	return Pixel{
-		R: pixel.R,
-		G: pixel.G,
-		B: pixel.B,
-		A: pixel.A,
-	}
-}
-
 func Decode(data []byte) (success bool, result Image) {
 	buffer := NewBuffer(data)
 
@@ -77,38 +68,40 @@ func Decode(data []byte) (success bool, result Image) {
 		case CHUNK_RGB:
 			bytes := buffer.ConsumeBytes(4)
 
-			lastPixel = Pixel{R: bytes[1], G: bytes[2], B: bytes[3], A: lastPixel.A}
-			pixels = append(pixels, lastPixel.Clone())
+			lastPixel.R = bytes[1]
+			lastPixel.G = bytes[2]
+			lastPixel.B = bytes[3]
+			pixels = append(pixels, lastPixel)
 
-			index := (lastPixel.R*3 + lastPixel.G*5 + lastPixel.B*7 + lastPixel.A*11) % 64
-			runningPixels[index] = lastPixel.Clone()
+			runningPixels[hashPixel(&lastPixel)] = lastPixel
 		case CHUNK_RGBA:
 			bytes := buffer.ConsumeBytes(5)
 
-			lastPixel = Pixel{R: bytes[1], G: bytes[2], B: bytes[3], A: bytes[4]}
-			pixels = append(pixels, lastPixel.Clone())
+			lastPixel.R = bytes[1]
+			lastPixel.G = bytes[2]
+			lastPixel.B = bytes[3]
+			lastPixel.A = bytes[4]
+			pixels = append(pixels, lastPixel)
 
-			index := (lastPixel.R*3 + lastPixel.G*5 + lastPixel.B*7 + lastPixel.A*11) % 64
-			runningPixels[index] = lastPixel.Clone()
+			runningPixels[hashPixel(&lastPixel)] = lastPixel
 		case CHUNK_INDEX:
 			b := buffer.ConsumeBytes(1)[0]
 
-			lastPixel = runningPixels[b].Clone()
-			pixels = append(pixels, lastPixel.Clone())
-
-			index := (lastPixel.R*3 + lastPixel.G*5 + lastPixel.B*7 + lastPixel.A*11) % 64
-			runningPixels[index] = lastPixel.Clone()
+			lastPixel = runningPixels[b]
+			pixels = append(pixels, lastPixel)
 		case CHUNK_DIFF:
 			b := buffer.ConsumeBytes(1)[0]
 
 			dr := (b&0b00110000)>>4 - 2
 			dg := (b&0b00001100)>>2 - 2
 			db := b&0b00000011 - 2
-			lastPixel = Pixel{R: lastPixel.R + dr, G: lastPixel.G + dg, B: lastPixel.B + db, A: lastPixel.A}
-			pixels = append(pixels, lastPixel.Clone())
 
-			index := (lastPixel.R*3 + lastPixel.G*5 + lastPixel.B*7 + lastPixel.A*11) % 64
-			runningPixels[index] = lastPixel.Clone()
+			lastPixel.R += dr
+			lastPixel.G += dg
+			lastPixel.B += db
+			pixels = append(pixels, lastPixel)
+
+			runningPixels[hashPixel(&lastPixel)] = lastPixel
 		case CHUNK_LUMA:
 			bytes := buffer.ConsumeBytes(2)
 
@@ -119,17 +112,18 @@ func Decode(data []byte) (success bool, result Image) {
 			dr := dg + drdg
 			db := dg + dbdg
 
-			lastPixel = Pixel{R: lastPixel.R + dr, G: lastPixel.G + dg, B: lastPixel.B + db, A: lastPixel.A}
-			pixels = append(pixels, lastPixel.Clone())
+			lastPixel.R += dr
+			lastPixel.G += dg
+			lastPixel.B += db
+			pixels = append(pixels, lastPixel)
 
-			index := (lastPixel.R*3 + lastPixel.G*5 + lastPixel.B*7 + lastPixel.A*11) % 64
-			runningPixels[index] = lastPixel.Clone()
+			runningPixels[hashPixel(&lastPixel)] = lastPixel
 		case CHUNK_RUN:
 			b := buffer.ConsumeBytes(1)[0]
 			runLength := (b & 0b00111111) + 1
 
 			for i := 0; i < int(runLength); i++ {
-				pixels = append(pixels, lastPixel.Clone())
+				pixels = append(pixels, lastPixel)
 			}
 		}
 
@@ -165,16 +159,17 @@ func getNextChunkType(buffer *Buffer) ChunkType {
 		return CHUNK_RGBA
 	}
 
-	if (number&0b11000000)>>6 == 0 {
+	n := (number & 0b11000000) >> 6
+	if n == 0 {
 		return CHUNK_INDEX
 	}
-	if (number&0b11000000)>>6 == 1 {
+	if n == 1 {
 		return CHUNK_DIFF
 	}
-	if (number&0b11000000)>>6 == 2 {
+	if n == 2 {
 		return CHUNK_LUMA
 	}
-	if (number&0b11000000)>>6 == 3 {
+	if n == 3 {
 		return CHUNK_RUN
 	}
 
@@ -194,4 +189,8 @@ func isEnd(bytes []byte) bool {
 	}
 
 	return bytes[7] == 1
+}
+
+func hashPixel(pixel *Pixel) uint8 {
+	return (pixel.R*3 + pixel.G*5 + pixel.B*7 + pixel.A*11) % 64
 }
