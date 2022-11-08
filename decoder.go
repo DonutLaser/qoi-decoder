@@ -1,6 +1,8 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type ChannelsType uint8
 type ColorspaceType uint8
@@ -42,6 +44,10 @@ type Pixel struct {
 	G uint8
 	B uint8
 	A uint8
+}
+
+func (pixel *Pixel) IsEqualTo(other *Pixel) bool {
+	return pixel.R == other.R && pixel.G == other.G && pixel.B == other.B && pixel.A == other.A
 }
 
 func Decode(data []byte) (success bool, result Image) {

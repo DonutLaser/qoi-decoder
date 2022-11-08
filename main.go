@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -53,7 +55,7 @@ func parseArgs() (result Args, success bool) {
 	return result, true
 }
 
-func debugImage(image Image) {
+func debugWriteImage(path string, image Image) {
 	var sb strings.Builder
 
 	sb.WriteString(fmt.Sprintf("%d\n", image.Header.Width))
@@ -63,7 +65,31 @@ func debugImage(image Image) {
 		sb.WriteString(fmt.Sprintf("%d %d %d %d\n", pixel.R, pixel.G, pixel.B, pixel.A))
 	}
 
-	WriteFile("test.txt", sb.String())
+	WriteFile(fmt.Sprintf("%s.txt", path), sb.String())
+}
+
+func debugReadImage(data string) (width uint32, height uint32, result []Pixel) {
+	lines := strings.Split(data, "\n")
+
+	parsedWidth, _ := strconv.ParseUint(lines[0], 10, 32)
+	width = uint32(parsedWidth)
+
+	parsedHeight, _ := strconv.ParseUint(lines[1], 10, 32)
+	height = uint32(parsedHeight)
+
+	for i := 2; i < len(lines); i++ {
+		rgbaStrings := strings.Split(lines[i], " ")
+
+		var rgba []uint8
+		for j := 0; j < len(rgbaStrings); j++ {
+			parsed, _ := strconv.ParseUint(rgbaStrings[j], 10, 8)
+			rgba = append(rgba, uint8(parsed))
+		}
+
+		result = append(result, Pixel{R: rgba[0], G: rgba[1], B: rgba[2], A: rgba[3]})
+	}
+
+	return
 }
 
 func main() {
@@ -82,8 +108,19 @@ func main() {
 			return
 		}
 
-		debugImage(image)
+		filename := filepath.Base(args.File)
+		filenameNoExtension := filename[:len(filename)-len(filepath.Ext(filename))]
+
+		debugWriteImage(filenameNoExtension, image)
 	} else {
-		fmt.Print("Encoding...")
+		file := ReadFile(args.File)
+		width, height, data := debugReadImage(string(file))
+
+		encoded := Encode(data, width, height)
+
+		filename := filepath.Base(args.File)
+		filenameNoExtension := filename[:len(filename)-len(filepath.Ext(filename))]
+
+		WriteFile(fmt.Sprintf("%s.qoi", filenameNoExtension), string(encoded))
 	}
 }
