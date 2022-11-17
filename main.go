@@ -61,8 +61,12 @@ func debugWriteImage(path string, image Image) {
 	sb.WriteString(fmt.Sprintf("%d\n", image.Header.Width))
 	sb.WriteString(fmt.Sprintf("%d\n", image.Header.Height))
 
-	for _, pixel := range image.Data {
-		sb.WriteString(fmt.Sprintf("%d %d %d %d\n", pixel.R, pixel.G, pixel.B, pixel.A))
+	for index, pixel := range image.Data {
+		if index == len(image.Data)-1 {
+			sb.WriteString(fmt.Sprintf("%d %d %d %d", pixel.R, pixel.G, pixel.B, pixel.A))
+		} else {
+			sb.WriteString(fmt.Sprintf("%d %d %d %d\n", pixel.R, pixel.G, pixel.B, pixel.A))
+		}
 	}
 
 	WriteFile(fmt.Sprintf("%s.txt", path), sb.String())
