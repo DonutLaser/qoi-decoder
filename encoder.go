@@ -34,7 +34,14 @@ func Encode(data []Pixel, width uint32, height uint32) []byte {
 				lastPixel = data[i]
 			}
 		} else if data[i].A == lastPixel.A {
-			encodeRGBChunk(&bb, &data[i])
+			if canColorBeEncodedAsDiff(&data[i], &lastPixel) {
+				encodeDiffChunk(&bb, &data[i], &lastPixel)
+			} else if canColorBeEncodedAsLuma(&data[i], &lastPixel) {
+				encodeLumaChunk(&bb, &data[i], &lastPixel)
+			} else {
+				encodeRGBChunk(&bb, &data[i])
+			}
+
 			lastPixel = data[i]
 		} else if data[i].A != lastPixel.A {
 			encodeRGBAChunk(&bb, &data[i])
@@ -98,10 +105,46 @@ func encodeRGBAChunk(bb *bytes.Buffer, pixel *Pixel) {
 	bb.WriteByte(pixel.A)
 }
 
+func encodeDiffChunk(bb *bytes.Buffer, currentPixel *Pixel, lastPixel *Pixel) {
+	rDiff := currentPixel.R - lastPixel.R + 2
+	gDiff := currentPixel.G - lastPixel.G + 2
+	bDiff := currentPixel.B - lastPixel.B + 2
+
+	bb.WriteByte(0b01000000 | (rDiff << 4) | (gDiff << 2) | bDiff)
+}
+
+func encodeLumaChunk(bb *bytes.Buffer, currentPixel *Pixel, lastPixel *Pixel) {
+	rDiff := currentPixel.R - lastPixel.R
+	gDiff := currentPixel.G - lastPixel.G
+	bDiff := currentPixel.B - lastPixel.B
+
+	drdg := rDiff - gDiff
+	dbdg := bDiff - gDiff
+
+	bb.WriteByte(0b10000000 | (gDiff + 32))
+	bb.WriteByte(0b00000000 | ((drdg + 8) << 4) | (dbdg + 8))
+}
+
 func encodeStreamEnd(bb *bytes.Buffer) {
 	for i := 0; i < 7; i++ {
 		bb.WriteByte(0)
 	}
 
 	bb.WriteByte(1)
+}
+
+func canColorBeEncodedAsDiff(pixel1 *Pixel, pixel2 *Pixel) bool {
+	rDiff := pixel1.R - pixel2.R + 2
+	gDiff := pixel1.G - pixel2.G + 2
+	bDiff := pixel1.B - pixel2.B + 2
+
+	return rDiff <= 3 && gDiff <= 3 && bDiff <= 3
+}
+
+func canColorBeEncodedAsLuma(pixel1 *Pixel, pixel2 *Pixel) bool {
+	rDiff := (pixel1.R - pixel2.R) - (pixel1.G - pixel2.G) + 8
+	gDiff := pixel1.G - pixel2.G + 32
+	bDiff := (pixel1.B - pixel2.B) - (pixel1.G - pixel2.G) + 8
+
+	return rDiff <= 15 && gDiff <= 63 && bDiff <= 15
 }
